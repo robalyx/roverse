@@ -2,14 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
-	"github.com/syumai/tinyutil/httputil"
 	"github.com/syumai/workers"
 	"github.com/syumai/workers/cloudflare"
+	"github.com/syumai/workers/cloudflare/fetch"
 )
 
 // AuthHeaderName is the header name for the secret key.
@@ -37,7 +37,9 @@ func main() {
 		panic("PROXY_SECRET_KEY environment variable is required")
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	workers.Serve(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		cloudflare.PassThroughOnException()
+
 		// Check secret key
 		if req.Header.Get(AuthHeaderName) != secretKey {
 			sendJSONError(w, &errUnauthorized, http.StatusUnauthorized)
@@ -77,52 +79,54 @@ func main() {
 			targetURL += "?" + req.URL.RawQuery
 		}
 
-		// Create new request
-		proxyReq, err := http.NewRequestWithContext(req.Context(), req.Method, targetURL, req.Body)
+		// Create fetch client and request
+		fc := fetch.NewClient()
+		fetchReq, err := fetch.NewRequest(req.Context(), req.Method, targetURL, req.Body)
 		if err != nil {
-			log.Printf("Error creating proxy request: %v\n", err)
+			fmt.Printf("Error creating proxy request: %v\n", err)
 			sendJSONError(w, &errorResponse{Message: "Failed to create proxy request."}, http.StatusInternalServerError)
 			return
 		}
 
 		// Copy all headers from original request except the secret key
-		proxyReq.Header = make(http.Header, len(req.Header)-1)
 		for key, values := range req.Header {
 			if !strings.EqualFold(key, AuthHeaderName) {
-				proxyReq.Header[key] = values
+				fetchReq.Header[key] = values
 			}
 		}
 
 		// Ensure Content-Type is set for POST/PUT requests
-		if (req.Method == "POST" || req.Method == "PUT") && proxyReq.Header.Get("Content-Type") == "" {
-			proxyReq.Header.Set("Content-Type", contentTypeJSON)
+		if (req.Method == "POST" || req.Method == "PUT") && fetchReq.Header.Get("Content-Type") == "" {
+			fetchReq.Header.Set("Content-Type", contentTypeJSON)
 		}
 
 		// Perform the request
-		resp, err := httputil.DefaultClient.Do(proxyReq)
+		resp, err := fc.Do(fetchReq, &fetch.RequestInit{
+			Redirect: fetch.RedirectModeFollow,
+		})
 		if err != nil {
-			log.Printf("Error proxying request to %s: %v\n", targetURL, err)
+			fmt.Printf("Error proxying request to %s: %v\n", targetURL, err)
 			sendJSONError(w, &errorResponse{Message: "Failed to proxy request: " + err.Error()}, http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
+
+		// Log error responses asynchronously
+		if resp.StatusCode >= 400 {
+			cloudflare.WaitUntil(func() {
+				fmt.Printf("Error proxying request to %s (status: %d)\n", targetURL, resp.StatusCode)
+			})
+		}
 
 		// Copy response headers
 		for key, values := range resp.Header {
 			w.Header()[key] = values
 		}
 
-		// Set response status code
+		// Set response status code and copy body
 		w.WriteHeader(resp.StatusCode)
-
-		// Copy response body
-		_, err = io.Copy(w, resp.Body)
-		if err != nil {
-			log.Printf("Error copying response: %v\n", err)
-		}
-	})
-
-	workers.Serve(nil)
+		io.Copy(w, resp.Body)
+	}))
 }
 
 // sendJSONError sends a JSON error response.
@@ -130,7 +134,7 @@ func sendJSONError(w http.ResponseWriter, err *errorResponse, status int) {
 	w.Header().Set("Content-Type", contentTypeJSON)
 	w.WriteHeader(status)
 	if encErr := json.NewEncoder(w).Encode(err); encErr != nil {
-		log.Printf("Error encoding JSON response: %v\n", encErr)
+		fmt.Printf("Error encoding JSON response: %v\n", encErr)
 		w.Header().Set("Content-Type", contentTypePlain)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("Internal Server Error: Failed to encode JSON response"))
