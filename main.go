@@ -21,8 +21,9 @@ const (
 )
 
 var (
-	errMissingSubdomain = errorResponse{Message: "Missing subdomain."}
-	errUnauthorized     = errorResponse{Message: "Unauthorized"}
+	errUnauthorized = errorResponse{Message: "Unauthorized"}
+	errInternal     = errorResponse{Message: "Internal Server Error"}
+	errBadGateway   = errorResponse{Message: "Bad Gateway"}
 )
 
 // errorResponse represents an error message structure.
@@ -31,7 +32,7 @@ type errorResponse struct {
 }
 
 func main() {
-	// Get secret key from environment
+	// Get environment variables
 	secretKey := cloudflare.Getenv("PROXY_SECRET_KEY")
 	if secretKey == "" {
 		panic("PROXY_SECRET_KEY environment variable is required")
@@ -46,35 +47,14 @@ func main() {
 			return
 		}
 
-		// Get first path segment
-		path := strings.TrimPrefix(req.URL.Path, "/")
-		i := strings.IndexByte(path, '/')
-		var subdomain string
-		if i == -1 {
-			subdomain = path
-		} else {
-			subdomain = path[:i]
-		}
-
-		// Check if subdomain is provided
-		if subdomain == "" {
-			sendJSONError(w, &errMissingSubdomain, http.StatusBadRequest)
-			return
-		}
-
-		// Check if subdomain is valid
-		if strings.Contains(subdomain, ".") {
-			sendJSONError(w, &errorResponse{Message: "Invalid subdomain format."}, http.StatusBadRequest)
-			return
+		// Extract subdomain from the request host
+		host := req.Host
+		if idx := strings.Index(host, "."); idx != -1 {
+			host = host[:idx]
 		}
 
 		// Construct the target URL
-		var targetURL string
-		if i == -1 {
-			targetURL = "https://" + subdomain + ".roblox.com/"
-		} else {
-			targetURL = "https://" + subdomain + ".roblox.com/" + path[i+1:]
-		}
+		targetURL := fmt.Sprintf("https://%s.roblox.com%s", host, req.URL.Path)
 		if req.URL.RawQuery != "" {
 			targetURL += "?" + req.URL.RawQuery
 		}
@@ -83,8 +63,8 @@ func main() {
 		fc := fetch.NewClient()
 		fetchReq, err := fetch.NewRequest(req.Context(), req.Method, targetURL, req.Body)
 		if err != nil {
-			fmt.Printf("Error creating proxy request: %v\n", err)
-			sendJSONError(w, &errorResponse{Message: "Failed to create proxy request."}, http.StatusInternalServerError)
+			fmt.Printf("Error creating request: %v\n", err)
+			sendJSONError(w, &errInternal, http.StatusInternalServerError)
 			return
 		}
 
@@ -105,8 +85,8 @@ func main() {
 			Redirect: fetch.RedirectModeFollow,
 		})
 		if err != nil {
-			fmt.Printf("Error proxying request to %s: %v\n", targetURL, err)
-			sendJSONError(w, &errorResponse{Message: "Failed to proxy request: " + err.Error()}, http.StatusBadGateway)
+			fmt.Printf("Error requesting %s: %v\n", targetURL, err)
+			sendJSONError(w, &errBadGateway, http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
@@ -114,7 +94,7 @@ func main() {
 		// Log error responses asynchronously
 		if resp.StatusCode >= 400 {
 			cloudflare.WaitUntil(func() {
-				fmt.Printf("Error proxying request to %s (status: %d)\n", targetURL, resp.StatusCode)
+				fmt.Printf("Error requesting %s (status: %d)\n", targetURL, resp.StatusCode)
 			})
 		}
 

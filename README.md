@@ -33,9 +33,11 @@ Roverse uses [Cloudflare Workers](https://developers.cloudflare.com/workers) to 
 - [Go](https://go.dev/dl/) 1.23.5 or later
 - [TinyGo](https://tinygo.org/getting-started/install/) 0.29.0 or later
 - [Node.js](https://nodejs.org/en/download/)
+- [Just](https://just.systems/man/en/chapter_1.html)
+  - Installation packages [here](https://just.systems/man/en/packages.html)
 - [Cloudflare Account](https://dash.cloudflare.com/)
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
-  - just run `npm install -g wrangler`
+  - Run `npm install -g wrangler`
 
 ## 🚀 Getting Started
 
@@ -50,15 +52,18 @@ Roverse uses [Cloudflare Workers](https://developers.cloudflare.com/workers) to 
    ```
 
 2. **Configure Environment**:
-   - Set your worker name in `wrangler.toml`
-   - Configure your secret key:
-     ```bash
-     wrangler secret put PROXY_SECRET_KEY
-     ```
+   ```bash
+   # Copy the environment template
+   cp .env.template .env
+   
+   # Edit .env with your settings
+   # Set PROXY_DOMAIN to your workers.dev domain or custom domain
+   # Set PROXY_SECRET_KEY to your desired secret key
+   ```
 
 3. **Deploy**:
    ```bash
-   make deploy
+   just deploy
    ```
 
 ## 📖 Usage Guide
@@ -67,11 +72,11 @@ All requests to the proxy must include the `X-Proxy-Secret` header with your con
 
 ### Converting Roblox URLs to Worker Requests
 
-To use the proxy, convert any Roblox API URL to a worker request by taking the subdomain and path. The format is:
+To use the proxy, convert any Roblox API URL by replacing the official domain with your configured domain. The format is:
 
 ```bash
 Roblox URL:    https://{subdomain}.roblox.com/{path}
-Worker URL:    https://your-worker.workers.dev/{subdomain}/{path}
+Worker URL:    https://{subdomain}.your-domain.com/{path}
 ```
 
 ### Examples
@@ -82,17 +87,17 @@ Using curl:
 # Get user details  
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://your-worker.workers.dev/users/v1/users/1"
+  "https://users.your-domain.com/v1/users/1"
 
 # Get groups with query parameters
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://your-worker.workers.dev/groups/v1/groups/search?keyword=test&prioritizeExactMatch=false&limit=10"
+  "https://groups.your-domain.com/v1/groups/search?keyword=test&prioritizeExactMatch=false&limit=10"
 
 # Get games with universe IDs
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://your-worker.workers.dev/games/v1/games?universeIds=1,2,3"
+  "https://games.your-domain.com/v1/games?universeIds=1,2,3"
 ```
 
 The proxy will keep all your original headers (except the secret key) and forward them to the Roblox API.
@@ -102,26 +107,40 @@ The proxy will keep all your original headers (except the secret key) and forwar
 ### Commands
 
 ```bash
+# Generate config from template
+just generate-config
+
 # Start development server
-make dev
+just dev
 
 # Build WebAssembly binary
-make build
+just build
 
 # Deploy to Cloudflare
-make deploy
+just deploy
 ```
 
 ### Testing Dev Server
 
 Before testing, you may want to modify the `PROXY_SECRET_KEY` in your `.dev.vars` file. By default, it's set to "development".
 
-You can test the dev server using curl:
+> [!NOTE]
+> Make sure your system's hosts file allows subdomain resolution for localhost. Most modern operating systems support this by default.
+
+When running the development server, you can access different Roblox API endpoints by using subdomains with localhost. For example:
 
 ```bash
-# Test the proxy with the users endpoint
+# Test users endpoint
 curl -H "X-Proxy-Secret: development" \
-  http://localhost:8787/users/v1/users/1
+  "http://users.localhost:8787/v1/users/1"
+
+# Test games endpoint
+curl -H "X-Proxy-Secret: development" \
+  "http://games.localhost:8787/v1/games?universeIds=1,2,3"
+
+# Test groups endpoint
+curl -H "X-Proxy-Secret: development" \
+  "http://groups.localhost:8787/v1/groups/search?keyword=test"
 ```
 
 ## ⚠️ Pitfalls
@@ -151,19 +170,9 @@ There is no reason for Cloudflare to block your worker as long as you're not abu
 <details>
 <summary>Protecting Against Unauthorized Usage</summary>
 
-I'm sure you wouldn't want to wake up to a 100k dollar bill in your bank account, so to protect your worker from unauthorized usage, you can link a custom domain and implement Cloudflare's Web Application Firewall (WAF) rules:
+It's important to protect your worker from unauthorized usage and potential costly bills.
 
-1. Link a custom domain to your worker in the Cloudflare Dashboard under your worker's settings at Domains & Routes.
-
-2. Navigate to your domain settings, then Security > WAF > Custom Rules to create firewall rules specific to your hostname.
-
-3. If you're expecting requests from a specific IP only, you can create a rule with an expression like:
-   ```bash
-   (ip.src ne YOUR_IP_ADDRESS and http.host wildcard "your-subdomain.example.com")
-   ```
-   Replace `YOUR_IP_ADDRESS` and `your-subdomain.example.com` with your actual values.
-
-This setup helps ensure your worker's request quota isn't consumed by unauthorized traffic. Please do test to ensure that your setup is working as expected.
+Some good practices would be to use a **custom domain** instead of workers.dev, implement **Cloudflare's Web Application Firewall (WAF)** rules, regularly monitor your worker's metrics, and **periodic rotation of your secret keys** which minimizes the impact of potential key leaks.
 
 </details>
 
@@ -186,7 +195,23 @@ The secret key is stored securely in Cloudflare Workers' environment variables. 
 <details>
 <summary>What endpoints are supported?</summary>
 
-The proxy supports all Roblox API endpoints. If you find any endpoints that aren't working correctly, please [open an issue](https://github.com/robalyx/roverse/issues) and we'll investigate it.
+The proxy supports common Roblox API endpoints including users, games, groups, friends, avatar, presence, and thumbnails. To add support for additional subdomains:
+
+1. Open `wrangler.template.toml`
+2. Add a new route entry following the existing pattern:
+   ```toml
+   { pattern = "your-subdomain.${PROXY_DOMAIN}", custom_domain = true }
+   ```
+3. Deploy your changes
+
+If you find any endpoints that aren't working correctly, please [open an issue](https://github.com/robalyx/roverse/issues).
+
+</details>
+
+<details>
+<summary>Why use TinyGo instead of regular Go?</summary>
+
+Although the built WebAssembly binary doesn't exceed Cloudflare's free plan limit of 3MB, TinyGo is still required due to **memory constraints** in the Workers runtime environment. Regular Go's WebAssembly output includes a larger runtime and garbage collector that would increase the memory usage of Cloudflare Workers. TinyGo produces a more efficient WebAssembly binary with a smaller runtime footprint that works within these memory constraints.
 
 </details>
 

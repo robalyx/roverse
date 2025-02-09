@@ -1,0 +1,16 @@
+name = "roverse"
+main = "./build/worker.mjs"
+compatibility_date = "2024-04-15"
+
+routes = [
+  { pattern = "games.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "friends.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "users.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "avatar.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "groups.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "presence.${PROXY_DOMAIN}", custom_domain = true },
+  { pattern = "thumbnails.${PROXY_DOMAIN}", custom_domain = true }
+]
+
+[observability.logs]
+enabled = true 
