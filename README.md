@@ -7,6 +7,9 @@
   <a href="https://github.com/robalyx/roverse/issues">
     <img src="https://img.shields.io/github/issues/robalyx/roverse?style=flat-square&color=4a92e1">
   </a>
+  <a href="https://discord.gg/2Cn7kXqqhY">
+    <img src="https://img.shields.io/discord/1294585467462746292?style=flat-square&color=4a92e1&label=discord" alt="Join our Discord">
+  </a>
 </h1>
 
 <p align="center">
@@ -53,8 +56,8 @@ Roverse uses [Cloudflare Workers](https://developers.cloudflare.com/workers) to 
 
 2. **Configure Environment**:
    ```bash
-   # Copy the environment template
-   cp .env.template .env
+   # Copy the environment example
+   cp .env.example .env
    
    # Edit .env with your settings
    # Set PROXY_DOMAIN to your workers.dev domain or custom domain
