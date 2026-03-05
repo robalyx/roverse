@@ -16,70 +16,64 @@
   <em>A secure and efficient Cloudflare Worker proxy for Roblox API endpoints.</em>
 </p>
 
-## 📚 Table of Contents
+## Table of Contents
 
-- [🔧 How It Works](#-how-it-works)
-- [📋 Requirements](#-requirements)
-- [🚀 Getting Started](#-getting-started)
-- [📖 Usage Guide](#-usage-guide)
-- [🛠️ Development](#️-development)
-- [⚠️ Pitfalls](#️-pitfalls)
-- [❓ FAQ](#-faq)
-- [📄 License](#-license)
+- [How It Works](#how-it-works)
+- [Requirements](#requirements)
+- [Getting Started](#getting-started)
+- [Usage Guide](#usage-guide)
+- [Development](#development)
+- [Pitfalls](#pitfalls)
+- [FAQ](#faq)
+- [License](#license)
 
-## 🔧 How It Works
+## How It Works
 
 Roverse uses [Cloudflare Workers](https://developers.cloudflare.com/workers) to create a secure proxy layer between your application and Roblox's API endpoints. When you make a request to your worker, it forwards that request to the corresponding Roblox API endpoint while keeping all necessary headers and authentication.
 
-## 📋 Requirements
+## Requirements
 
-- [Go](https://go.dev/dl/) 1.23.5 or later
-- [TinyGo](https://tinygo.org/getting-started/install/) 0.29.0 or later
-- [Node.js](https://nodejs.org/en/download/)
-- [Just](https://just.systems/man/en/chapter_1.html)
-  - Installation packages [here](https://just.systems/man/en/packages.html)
+- [Bun](https://bun.sh/)
 - [Cloudflare Account](https://dash.cloudflare.com/)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
-  - Run `npm install -g wrangler`
 
-## 🚀 Getting Started
+## Getting Started
 
 1. **Clone and Setup**:
    ```bash
    # Clone the repository
    git clone https://github.com/robalyx/roverse.git
    cd roverse
-   
+
    # Install dependencies
-   go mod tidy
+   bun install
    ```
 
 2. **Configure Environment**:
    ```bash
    # Copy the environment example
    cp .env.example .env
-   
+
    # Edit .env with your settings
-   # Set PROXY_DOMAIN to your workers.dev domain or custom domain
+   # Set PROXY_DOMAIN to your custom domain (e.g. your-domain.com)
    # Set PROXY_SECRET_KEY to your desired secret key
    ```
 
 3. **Deploy**:
    ```bash
-   just deploy
+   bun run deploy
    ```
 
-## 📖 Usage Guide
+## Usage Guide
 
 All requests to the proxy must include the `X-Proxy-Secret` header with your configured secret key. This authentication mechanism ensures that only authorized clients can access your proxy, preventing unauthorized usage and potential abuse of your worker's resources.
 
 ### Converting Roblox URLs to Worker Requests
 
-To use the proxy, convert any Roblox API URL by replacing the official domain with your configured domain. The format is:
+To use the proxy, convert any Roblox API URL by moving the subdomain into the first path segment:
 
 ```bash
 Roblox URL:    https://{subdomain}.roblox.com/{path}
-Worker URL:    https://{subdomain}.your-domain.com/{path}
+Worker URL:    https://your-domain.com/{subdomain}/{path}
 ```
 
 ### Examples
@@ -87,66 +81,60 @@ Worker URL:    https://{subdomain}.your-domain.com/{path}
 Using curl:
 
 ```bash
-# Get user details  
+# Get user details
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://users.your-domain.com/v1/users/1"
+  "https://your-domain.com/users/v1/users/1"
 
 # Get groups with query parameters
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://groups.your-domain.com/v1/groups/search?keyword=test&prioritizeExactMatch=false&limit=10"
+  "https://your-domain.com/groups/v1/groups/search?keyword=test&prioritizeExactMatch=false&limit=10"
 
 # Get games with universe IDs
 curl -X GET \
   -H "X-Proxy-Secret: your-secret-key" \
-  "https://games.your-domain.com/v1/games?universeIds=1,2,3"
+  "https://your-domain.com/games/v1/games?universeIds=1,2,3"
 ```
 
 The proxy will keep all your original headers (except the secret key) and forward them to the Roblox API.
 
-## 🛠️ Development
+## Development
 
 ### Commands
 
 ```bash
 # Generate config from template
-just generate-config
+bun run generate-config
 
 # Start development server
-just dev
-
-# Build WebAssembly binary
-just build
+bun run dev
 
 # Deploy to Cloudflare
-just deploy
+bun run deploy
 ```
 
 ### Testing Dev Server
 
 Before testing, you may want to modify the `PROXY_SECRET_KEY` in your `.dev.vars` file. By default, it's set to "development".
 
-> [!NOTE]
-> Make sure your system's hosts file allows subdomain resolution for localhost. Most modern operating systems support this by default.
-
-When running the development server, you can access different Roblox API endpoints by using subdomains with localhost. For example:
+When running the development server, you can access different Roblox API endpoints using the path-based routing. For example:
 
 ```bash
 # Test users endpoint
 curl -H "X-Proxy-Secret: development" \
-  "http://users.localhost:8787/v1/users/1"
+  "http://localhost:8787/users/v1/users/1"
 
 # Test games endpoint
 curl -H "X-Proxy-Secret: development" \
-  "http://games.localhost:8787/v1/games?universeIds=1,2,3"
+  "http://localhost:8787/games/v1/games?universeIds=1,2,3"
 
 # Test groups endpoint
 curl -H "X-Proxy-Secret: development" \
-  "http://groups.localhost:8787/v1/groups/search?keyword=test"
+  "http://localhost:8787/groups/v1/groups/search?keyword=test"
 ```
 
-## ⚠️ Pitfalls
+## Pitfalls
 
 <details>
 <summary>Using workers.dev Domains</summary>
@@ -179,7 +167,7 @@ Some good practices would be to use a **custom domain** instead of workers.dev, 
 
 </details>
 
-## ❓ FAQ
+## FAQ
 
 <details>
 <summary>Why use a proxy for Roblox APIs?</summary>
@@ -198,32 +186,12 @@ The secret key is stored securely in Cloudflare Workers' environment variables. 
 <details>
 <summary>What endpoints are supported?</summary>
 
-The proxy supports common Roblox API endpoints including users, games, groups, friends, avatar, presence, and thumbnails. To add support for additional subdomains:
-
-1. Open `wrangler.template.toml`
-2. Add a new route entry following the existing pattern:
-   ```toml
-   { pattern = "your-subdomain.${PROXY_DOMAIN}", custom_domain = true }
-   ```
-3. Deploy your changes
+The proxy uses path-based routing, so all Roblox API subdomains are supported automatically. This includes users, games, groups, friends, avatar, presence, thumbnails, inventory, and any future subdomains Roblox adds.
 
 If you find any endpoints that aren't working correctly, please [open an issue](https://github.com/robalyx/roverse/issues).
 
 </details>
 
-<details>
-<summary>Why use TinyGo instead of regular Go?</summary>
-
-Although the built WebAssembly binary doesn't exceed Cloudflare's free plan limit of 3MB, TinyGo is still required due to **memory constraints** in the Workers runtime environment. Regular Go's WebAssembly output includes a larger runtime and garbage collector that would increase the memory usage of Cloudflare Workers. TinyGo produces a more efficient WebAssembly binary with a smaller runtime footprint that works within these memory constraints.
-
-</details>
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-  Made with ❤️ by the robalyx team
-</p>

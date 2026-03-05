@@ -1,0 +1,19 @@
+{
+	"name": "roverse",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"generate-config": "set -a && . ./.env && set +a && envsubst < wrangler.template.toml > wrangler.toml",
+		"dev": "bun run generate-config && bunx wrangler dev",
+		"deploy": "bun run generate-config && bunx wrangler deploy && bunx wrangler secret bulk .env",
+		"check": "bunx biome check",
+		"check:fix": "bunx biome check --fix"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.5",
+		"@cloudflare/workers-types": "^4.20260305.1"
+	},
+	"dependencies": {
+		"elysia": "^1.4"
+	}
+}

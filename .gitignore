@@ -1,5 +1,4 @@
 wrangler.toml
 .env
 .wrangler
-build/
 node_modules/
